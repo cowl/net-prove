@@ -150,14 +150,14 @@ partialUnify (l1:ls1) g = firsts l1 >>= rest ls1 where
 -- Identify 'lost' hypotheses and conclusions with eachother. We assume that the
 -- 'hypotheses' in the first list are not actually the premise of any link
 -- anymore, and that the 'conclusions' are not the succedent of any link.
-reunite :: [Identifier] -> [Identifier] -> CompositionGraph -> CompositionGraph
-reunite []  []  g = g
-reunite [h] [c] g = Map.delete h . Map.adjust (l⤴) c
+unite :: [Identifier] -> [Identifier] -> CompositionGraph -> CompositionGraph
+unite []  []  g   = g
+unite [h] [c] g   = Map.delete h . Map.adjust (l⤴) c
                   . adjust (l⤵) upstream . adjust (l⤴) neighbour $ g
   where l         = subst c h $ uplink h g
         upstream  = maybe [] prem l
         neighbour = maybe [] conc l
-reunite _ _ _     = error "Cannot reconnect multiple disconnected hypotheses\
+unite _ _ _       = error "Cannot reconnect multiple disconnected hypotheses\
       \and conclusions. Make sure that the proof transformations are sensible."
 
 
@@ -165,16 +165,16 @@ reunite _ _ _     = error "Cannot reconnect multiple disconnected hypotheses\
 -- proof net directly. It is still represented as a compositiongraph because it
 -- holds all the necessary information, but the semantics don't correspond any-
 -- more. Perhaps change the data type?
-asProofnet :: CompositionGraph -> CompositionGraph
-asProofnet = let collapseAxiom = [ Active 0  :|:  Active 1 ] :⤳ []
-             in  loop (listToMaybe . step [collapseAxiom])
+collapse :: CompositionGraph -> CompositionGraph
+collapse = let collapseAxiom = [ Active 0  :|:  Active 1 ] :⤳ []
+           in  loop (listToMaybe . step [collapseAxiom])
 
 
 -- Get all the instances of a proof transformation rule (that is, the
 -- transformations with identifiers that correspond to those in the graph) that
 -- can be applied to a graph
-instancesIn :: CompositionGraph -> ProofTransformation -> [ProofTransformation]
-instancesIn graph r@(old :⤳ _) = map (flip apply r) (partialUnify old graph)
+instantiations :: CompositionGraph -> ProofTransformation -> [ProofTransformation]
+instantiations graph r@(old :⤳ _) = map (flip apply r) (partialUnify old graph)
 
 
 -- Get the proof net that results when applying some proof transformation to a
@@ -187,13 +187,13 @@ transform graph (old :⤳ new) =
       orphans = oldInterior  \\ newInterior
       widower = oldHypotheses \\ newHypotheses
       widow   = oldConclusions \\ newConclusions
-  in reunite widower widow $ kill orphans $ connect new $ disconnect old graph
+  in unite widower widow $ kill orphans $ connect new $ disconnect old graph
 
 
 -- Get all possible proof nets after performing each generic transformation
 step :: [ProofTransformation] -> CompositionGraph -> [CompositionGraph]
 step transformations graph =
-  let possibilities = concatMap (instancesIn graph) transformations
+  let possibilities = concatMap (instantiations graph) transformations
   in  map (transform graph) possibilities
 
 
@@ -202,7 +202,7 @@ step' :: [(ProofTransformation, String)]
       ->  (CompositionGraph, [String])
       -> [(CompositionGraph, [String])]
 step' transformations (graph, history) =
-  let results      = map (transform graph) . instancesIn graph
+  let results      = map (transform graph) . instantiations graph
       try (t, log) = zip (results t) $ zipWith counter [1..] (repeat log)
       counter i s  = (:history) $ s ++ " (#" ++ show i ++ ")"
   in  concatMap try transformations
@@ -213,12 +213,12 @@ step' transformations (graph, history) =
 reductions :: [(ProofTransformation, String)]
            -> CompositionGraph -> [(CompositionGraph, [String])]
 reductions t g = filter (isTree . fst) $ loopNondeterministic (step' t) g'
-  where g' = (asProofnet g, [])
+  where g' = (collapse g, [])
 
 
 -- Is the composition graph a valid proof net?
 valid :: CompositionGraph -> Bool
-valid = isTree . loop greedy . asProofnet where
+valid = isTree . loop greedy . collapse where
   greedy = listToMaybe . step (map fst rules)
 
 
