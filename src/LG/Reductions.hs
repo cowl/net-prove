@@ -10,10 +10,10 @@ import Control.Monad
 
 -- Proof net transformations as in Moortgat & Moot 2012, pp 9-10
 
-data ProofTransformation = [Link] :⤳ [Link]
-contraction              = (:⤳ [])
-interaction              = ([[ Active 1, Active 2 ] :○: [ Active 0 ],
-                             [ Active 0 ] :○: [ Active 3, Active 4 ]] :⤳)
+data Transformation = [Link] :⤳ [Link]
+contraction         = (:⤳ [])
+interaction         = ([[ Active 1, Active 2 ] :○: [ Active 0 ],
+                       [ Active 0 ] :○: [ Active 3, Active 4 ]] :⤳)
 
 rdivR = contraction [[ Active 1, Active 2 ] :○: [ Active 3 ], -- R/
                      [ Active 3 ] :●: [ MainT  4, Active 2 ]]
@@ -110,7 +110,7 @@ instance Unifiable Link where
     ((p1 :|: s1), (p2 :|: s2)) -> unify s1 s2 u >>= unify p1 p2
     _                          -> Nothing
 
-instance Unifiable ProofTransformation where
+instance Unifiable Transformation where
   apply u (p :⤳ s) = apply u p :⤳ apply u s
   unify (p1 :⤳ s1) (p2 :⤳ s2) u = unify s1 s2 u >>= unify p1 p2
 
@@ -167,39 +167,36 @@ unite _ _ _       = error "Cannot reconnect multiple disconnected hypotheses\
 -- holds all the necessary information, but the semantics don't correspond any-
 -- more. Perhaps change the data type?
 collapse :: CompositionGraph -> CompositionGraph
-collapse = let collapseAxiom = [ Active 0  :|:  Active 1 ] :⤳ []
-           in  fromJust . loop (listToMaybe . step [collapseAxiom])
+collapse = head . loop (step [[ Active 0  :|:  Active 1 ] :⤳ []])
 
 
 -- Get all the instances of a proof transformation rule (that is, the
 -- transformations with identifiers that correspond to those in the graph) that
 -- can be applied to a graph
-instantiations :: CompositionGraph -> ProofTransformation -> [ProofTransformation]
+instantiations :: CompositionGraph -> Transformation -> [Transformation]
 instantiations graph r@(old :⤳ _) = map (flip apply r) (partialUnify old graph)
 
 
--- Get the proof net that results when applying some proof transformation to a
--- graph. The proof transformation must be instantiated with identifiers as they
--- occur in the graph.
-transform :: CompositionGraph -> ProofTransformation -> CompositionGraph
+-- Get the proof structure that results when applying some proof transformation
+-- to a graph. The proof transformation must be instantiated with identifiers as
+-- they occur in the graph.
+transform :: CompositionGraph -> Transformation -> CompositionGraph
 transform graph (old :⤳ new) =
   let (oldHypotheses, oldInterior, oldConclusions) = sift old
       (newHypotheses, newInterior, newConclusions) = sift new
       orphans = oldInterior  \\ newInterior
       widower = oldHypotheses \\ newHypotheses
       widow   = oldConclusions \\ newConclusions
-  in unite widower widow $ kill orphans $ connect new $ disconnect old graph
+  in  unite widower widow $ kill orphans $ connect new $ disconnect old graph
 
 
--- Get all possible proof nets after performing each generic transformation
-step :: [ProofTransformation] -> CompositionGraph -> [CompositionGraph]
-step transformations graph =
-  let possibilities = concatMap (instantiations graph) transformations
-  in  map (transform graph) possibilities
+-- Get all possible proof structures after performing generic transformations
+step :: [Transformation] -> CompositionGraph -> [CompositionGraph]
+step ts g = map (transform g) $ concatMap (instantiations g) ts
 
 
 -- Get all possible proof nets, keep track of rule application history (inverse)
-step' :: [(ProofTransformation, String)]
+step' :: [(Transformation, String)]
       ->  (CompositionGraph, [String])
       -> [(CompositionGraph, [String])]
 step' transformations (graph, history) =
@@ -211,7 +208,7 @@ step' transformations (graph, history) =
 
 -- From a list of named generic proof transformations and a raw composition
 -- graph, find all possible ways to arrive at a tree structure
-reductions :: [(ProofTransformation, String)]
+reductions :: [(Transformation, String)]
            -> CompositionGraph -> [(CompositionGraph, [String])]
 reductions t g = filter (isTree . fst) $ loop (step' t) g'
   where g' = (collapse g, [])
