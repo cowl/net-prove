@@ -5,6 +5,7 @@ import LG.Graph
 import qualified Data.Map as Map
 import Data.List
 import Data.Maybe
+import Control.Monad
 
 
 -- Proof net transformations as in Moortgat & Moot 2012, pp 9-10
@@ -167,7 +168,7 @@ unite _ _ _       = error "Cannot reconnect multiple disconnected hypotheses\
 -- more. Perhaps change the data type?
 collapse :: CompositionGraph -> CompositionGraph
 collapse = let collapseAxiom = [ Active 0  :|:  Active 1 ] :⤳ []
-           in  loop (listToMaybe . step [collapseAxiom])
+           in  fromJust . loop (listToMaybe . step [collapseAxiom])
 
 
 -- Get all the instances of a proof transformation rule (that is, the
@@ -212,34 +213,23 @@ step' transformations (graph, history) =
 -- graph, find all possible ways to arrive at a tree structure
 reductions :: [(ProofTransformation, String)]
            -> CompositionGraph -> [(CompositionGraph, [String])]
-reductions t g = filter (isTree . fst) $ loopNondeterministic (step' t) g'
+reductions t g = filter (isTree . fst) $ loop (step' t) g'
   where g' = (collapse g, [])
 
 
 -- Is the composition graph a valid proof net?
 valid :: CompositionGraph -> Bool
-valid = isTree . loop greedy . collapse where
+valid = isTree . fromJust . loop greedy . collapse where
   greedy = listToMaybe . step (map fst rules)
 
 
--- Looping. The code is already clearer than any explanation can be
-loop :: (a -> Maybe a) -> a -> a
-loop f start = case f start of
-  Just next -> loop f next
-  Nothing   -> start
-
-
--- Looping while keeping a list of intermediate results
-loopTrace :: (a -> Maybe a) -> a -> [a]
-loopTrace f start = (start : case f start of
-  Just next -> loopTrace f next
-  Nothing   -> [])
-
-
--- Nondeterministic looping, allowing exploration of every branch of calculation
--- and arriving at some end result every time that the calculation returns an
--- empty list
-loopNondeterministic :: (a -> [a]) -> a -> [a]
-loopNondeterministic f init = case f init of
-  [] -> [init]
-  xs -> xs >>= loopNondeterministic f
+-- Loop: repeatedly bind a function to wrapped value(s) until we arrive in a
+-- context that indicates failure, and return the final value(s) before failing.
+-- If "m" is a Maybe, we loop up until the point we would get Nothing; if "m" is
+-- a list we will do a nondeterministic loop, allowing exploration of every
+-- branch of calculation and collecting the end results (the values when the
+-- calculation exhausts its branches, e.g. ends in an empty list)
+loop :: (MonadPlus m, Eq (m a)) => (a -> m a) -> a -> m a
+loop f init | x == mzero = return init
+            | otherwise  = x >>= loop f
+            where x = f init
