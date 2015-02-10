@@ -45,11 +45,11 @@ g2    = interaction [[ Active 1 ] :○: [ Active 0, Active 4 ], -- Commutativity
 g4    = interaction [[ Active 2 ] :○: [ Active 3, Active 0 ], -- Commutativity
                      [ Active 1, Active 0 ] :○: [ Active 4 ]]
 
-rules = [(rdivR,   "R/"), (prodL, "L<×>"), (ldivR,   "R\\"),
-         (rdifL, "L</>"), (cprdR, "R<+>"), (ldifL, "L<\\>"),
-         (g1, "associativity G1"), (g3, "associativity G3"),
-         (g2, "commutativity G2"), (g4, "commutativity G4")]
-
+rules      = map fst namedRules
+namedRules = [(rdivR,   "R/"), (prodL, "L<×>"), (ldivR,   "R\\"),
+              (rdifL, "L</>"), (cprdR, "R<+>"), (ldifL, "L<\\>"),
+              (g1, "associativity G1"), (g3, "associativity G3"),
+              (g2, "commutativity G2"), (g4, "commutativity G4")]
 
 --------------------------------------------------------------------------------
 -- An instance of the unifiable class represents an object that can be wholly
@@ -219,8 +219,7 @@ reductions t g = filter (isTree . fst) $ loop (step' t) g'
 
 -- Is the composition graph a valid proof net?
 valid :: CompositionGraph -> Bool
-valid = isTree . fromJust . loop greedy . collapse where
-  greedy = listToMaybe . step (map fst rules)
+valid = isTree . head . loop (step rules) . collapse
 
 
 -- Loop: repeatedly bind a function to wrapped value(s) until we arrive in a
